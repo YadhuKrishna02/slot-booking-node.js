@@ -1,13 +1,16 @@
-import Dean from "../models/Dean.js"
-import mongoose from "mongoose";
+import User from "../models/User.js";
+import Session from "../models/Session.js";
 
+function convertToIST(date) {
+    const ISTOffset = 5.5 * 60 * 60 * 1000;
+    const istDate = new Date(date.getTime() + ISTOffset);
+    return istDate;
+}
 
 export const freeSessions = async (req, res) => {
-
-
     try {
         const slots = [];
-        const deanId = req.params.deanId
+        const deanId = req.params.deanId;
 
         const generateNext30DaysSlots = (() => {
             const today = new Date();
@@ -19,79 +22,110 @@ export const freeSessions = async (req, res) => {
             while (currentDate <= thirtyDaysFromNow) {
                 const dayOfWeek = currentDate.getDay();
                 if (dayOfWeek === 4 || dayOfWeek === 5) {
-                    slots.push(
-                        { date: currentDate.toDateString() },
-                    );
+                    const formattedDate = currentDate.toLocaleDateString('en-US', {
+                        day: '2-digit',
+                        weekday: 'short',
+                        month: 'short',
+                        year: 'numeric',
+                    });
+                    slots.push({ date: formattedDate });
                 }
 
                 currentDate.setDate(currentDate.getDate() + 1);
             }
             return slots;
-        })()
+        })();
 
-        const dean = await Dean.findById(deanId);
+        const dean = await User.findById(deanId);
 
-        if (!dean) {
-            return res.status(404).json({ message: "Dean not found" });
+        if (!dean || dean.role !== 'dean') {
+            return res.status(404).json({ message: 'Dean not found' });
         }
 
-        const availableSlots = [];
+        const bookedDates = await Session.find({
+            deanId: deanId,
+            status: 'pending',
+        }).distinct('slotStartTime');
 
-        for (let i = 0; i < slots.length; i++) {
-            const dateToCheck = slots[i].date;
-            const isDateInPendingDates = dean.pendingSessions.some((availableDate) => {
-                return Object.keys(availableDate)[0] === dateToCheck;
-            });
+        const formattedBookedDates = bookedDates.map((date) =>
+            new Date(date).toLocaleDateString('en-US', {
+                day: '2-digit',
+                weekday: 'short',
+                month: 'short',
+                year: 'numeric',
+            })
+        );
 
-            if (!isDateInPendingDates) {
-                availableSlots.push(slots[i]);
-            }
-        }
-        res.status(200).json({ message: "Available slots fetched", availableSlots })
+        const availableSlots = slots.filter((slot) => !formattedBookedDates.includes(slot.date));
 
-
+        res.status(200).json({ message: 'Available slots fetched', availableSlots });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Internal server error' });
     }
+};
 
-}
+
+
+
+
 
 
 export const bookSession = async (req, res) => {
-
     try {
-        const deanId = req.params.deanId
+        const deanId = req.params.deanId;
         const { sessionDate, studentId } = req.body;
 
-        const dean = await Dean.findById(deanId);
+        const dean = await User.findById(deanId);
 
-        if (!dean) {
-            return res.status(404).json({ message: "Dean not found" });
+        if (!dean || dean.role !== 'dean') {
+            return res.status(404).json({ message: 'Dean not found' });
         }
 
-        const existingSession = dean.pendingSessions.some(
-            (session) => {
+        const sessionStartTime = new Date(sessionDate);
+        sessionStartTime.setHours(10, 0, 0, 0);
 
-                return Object.keys(session)[0] == sessionDate
-            }
-        );
+        const ISTDate = convertToIST(sessionStartTime);
+
+        const existingSession = await Session.findOne({
+            slotStartTime: ISTDate,
+            status: 'pending',
+        });
+
 
         if (existingSession) {
-            return res.status(400).json({ message: "Session already booked for this date" });
+            return res.status(400).json({ message: 'Dean is already booked for this date' });
         }
 
-        const sessionInfo = {
-            [sessionDate]: studentId,
-        };
+        const existingDeanSession = await Session.findOne({
+            deanId: deanId,
+            slotStartTime: ISTDate,
+            status: 'pending',
+        });
 
-        dean.pendingSessions.push(sessionInfo);
+        if (existingDeanSession) {
+            return res.status(400).json({ message: 'Dean is already booked for this date' });
+        }
 
-        await dean.save();
+        // Create a new session
+        const newSession = new Session({
+            studentId: studentId,
+            deanId: deanId,
+            slotStartTime: ISTDate,
+        });
 
-        res.status(200).json({ message: "Session booked successfully" });
+        await newSession.save();
+
+        const slotDate = ISTDate.toLocaleDateString('en-US', {
+            day: '2-digit',
+            weekday: 'short',
+            month: 'short',
+            year: 'numeric',
+        });
+
+        res.status(200).json({ message: 'Session booked successfully', slotDate });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: "Internal server error" });
+        res.status(500).json({ message: 'Internal server error' });
     }
-}
+};

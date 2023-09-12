@@ -1,12 +1,12 @@
 import express from "express";
-import { verifyStudentUUID } from "../middlewares/authMiddleware.js";
+import { verifyUserUUID } from "../middlewares/authMiddleware.js";
 import { freeSessions, bookSession } from "../controllers/studentController.js";
 const studentRouter = () => {
     const router = express.Router()
 
-    router.get('/free-sessions/:deanId', verifyStudentUUID, freeSessions);
+    router.get('/free-sessions/:deanId', verifyUserUUID, freeSessions);
 
-    router.post('/book-session/:deanId', verifyStudentUUID, bookSession);
+    router.post('/book-session/:deanId', verifyUserUUID, bookSession);
 
 
     return router

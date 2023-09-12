@@ -1,32 +1,7 @@
-import Dean from "../models/Dean.js";
-import User from "../models/User.js";
+import User from '../models/User.js';
+import { v4 as uuidv4 } from 'uuid';
 
-export const verifyDeanUUID = async (req, res, next) => {
-    const bearerToken = req.header('Authorization');
-
-    if (!bearerToken || !bearerToken.startsWith('Bearer ')) {
-        return res.status(401).json({ message: 'Unauthorized dean' });
-    }
-
-    const token = bearerToken.split(' ')[1];
-
-
-    const dbToken = await Dean.findOne({ authToken: token });
-    if (dbToken?.authToken === token) {
-        next()
-    }
-    else {
-        return res.status(401).json({ message: 'Authentication failed. Invalid UUID.' });
-    }
-
-
-};
-
-
-
-// student middleware 
-
-export const verifyStudentUUID = async (req, res, next) => {
+export const verifyUserUUID = async (req, res, next) => {
     const bearerToken = req.header('Authorization');
 
     if (!bearerToken || !bearerToken.startsWith('Bearer ')) {
@@ -35,16 +10,15 @@ export const verifyStudentUUID = async (req, res, next) => {
 
     const token = bearerToken.split(' ')[1];
 
+    const dbUser = await User.findOne({ token });
 
-    const dbToken = await User.findOne({ authToken: token });
-    if (dbToken?.authToken === token) {
-        next()
-    }
-    else {
+    if (dbUser) {
+        if (dbUser.role === 'student' || dbUser.role === 'dean') {
+            next();
+        } else {
+            return res.status(401).json({ message: 'Authentication failed. Invalid role.' });
+        }
+    } else {
         return res.status(401).json({ message: 'Authentication failed. Invalid UUID.' });
     }
-
-
 };
-
-

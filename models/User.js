@@ -3,16 +3,21 @@ import { Schema, model } from "mongoose";
 const userSchema = new Schema({
     universityId: {
         type: String,
-        unique: true,
         required: true,
+        unique: true,
     },
     password: {
         type: String,
         required: true,
     },
-    authToken: {
+    token: {
         type: String,
-        required: false,
+        unique: true,
+    },
+    role: {
+        type: String,
+        enum: ['student', 'dean'],
+        required: true,
     },
 
 });
